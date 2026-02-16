@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TXT → HTML Converter • Downloadable</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0f11;
+      color: #e0e0e5;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    h1 {
+      text-align: center;
+      color: #a5d6ff;
+      margin-bottom: 0.6em;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .drop-zone {
+      border: 3px dashed #444;
+      border-radius: 12px;
+      padding: 50px 20px;
+      text-align: center;
+      background: #16161a;
+      transition: all 0.2s;
+      cursor: pointer;
+      margin-bottom: 1.5rem;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #60a5fa;
+      background: #1e293b;
+    }
+    .drop-zone p { margin: 0.4em 0; font-size: 1.05rem; color: #94a3b8; }
+    .highlight { color: #60a5fa; font-weight: bold; }
+
+    #fileList {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7rem;
+      margin: 1.2rem 0;
+    }
+    .file-item {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 1rem;
+      width: 100%;
+      max-width: 420px;
+      position: relative;
+    }
+    .file-name {
+      font-weight: 600;
+      margin: 0 0 0.6rem;
+      color: #c9d1d9;
+    }
+    .file-actions {
+      margin-top: 0.8rem;
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 0.55rem 1.1rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.92rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-view   { background: #238636; color: white; }
+    .btn-view:hover   { background: #2ea043; }
+    .btn-dl     { background: #1f6feb; color: white; }
+    .btn-dl:hover     { background: #388bfd; }
+    .btn-remove { background: #c94a4a; color: white; }
+    .btn-remove:hover { background: #d65a5a; }
+
+    #preview {
+      display: none;
+      margin-top: 2rem;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 1.5rem;
+      max-height: 70vh;
+      overflow: auto;
+      font-family: Consolas, monospace;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      color: #c9d1d9;
+    }
+    #preview h2 { margin-top: 0; color: #58a6ff; }
+
+    .clear-all {
+      display: block;
+      margin: 1.5rem auto;
+      background: #c94a4a;
+      color: white;
+      padding: 0.8rem 1.6rem;
+      font-size: 1.05rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .clear-all:hover { background: #d65a5a; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>TXT → Downloadable HTML</h1>
+
+  <div class="drop-zone" id="dropZone">
+    <p>Drop <span class="highlight">.txt</span> file(s) here</p>
+    <p>or click to select</p>
+  </div>
+
+  <div id="fileList"></div>
+
+  <button class="clear-all" id="btnClear" style="display:none;">Clear All</button>
+
+  <div id="preview">
+    <h2>Preview</h2>
+    <div id="previewContent"></div>
+  </div>
+</div>
+
+<script>
+// ────────────────────────────────────────────────
+const dropZone     = document.getElementById('dropZone');
+const fileListEl   = document.getElementById('fileList');
+const preview      = document.getElementById('preview');
+const previewCont  = document.getElementById('previewContent');
+const btnClear     = document.getElementById('btnClear');
+
+let filesData = []; // {file, name, htmlContent}
+
+['dragover', 'dragenter'].forEach(ev => {
+  dropZone.addEventListener(ev, e => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+});
+
+['dragleave', 'drop'].forEach(ev => {
+  dropZone.addEventListener(ev, e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+  });
+});
+
+dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+dropZone.addEventListener('click', () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.accept = '.txt,text/plain';
+  input.onchange = e => handleFiles(e.target.files);
+  input.click();
+});
+
+async function handleFiles(fileList) {
+  for (const file of fileList) {
+    if (!file.type.startsWith('text/') && !file.name.toLowerCase().endsWith('.txt')) continue;
+
+    // Skip duplicates by name+size
+    if (filesData.some(d => d.name === file.name && d.file.size === file.size)) continue;
+
+    try {
+      const text = await file.text();
+      const safe = escapeHtml(text)
+        .replace(/\r\n|\r|\n/g, '<br>')
+        .replace(/ {2}/g, ' &nbsp;');
+
+      const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(file.name)}</title>
+  <style>
+    body {
+      font-family: Consolas, monospace;
+      background: #0d1117;
+      color: #c9d1d9;
+      margin: 0;
+      padding: 2rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    h1 { color: #58a6ff; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(file.name)}</h1>
+  <div>${safe || '<em>(empty file)</em>'}</div>
+</body>
+</html>`;
+
+      filesData.push({
+        file,
+        name: file.name,
+        htmlContent: fullHtml
+      });
+    } catch (err) {
+      console.error("Error reading file:", err);
+    }
+  }
+
+  renderFiles();
+  btnClear.style.display = filesData.length ? 'block' : 'none';
+}
+
+function renderFiles() {
+  fileListEl.innerHTML = '';
+  filesData.forEach((item, i) => {
+    const div = document.createElement('div');
+    div.className = 'file-item';
+    div.innerHTML = `
+      <div class="file-name">${escapeHtml(item.name)}</div>
+      <div class="file-actions">
+        <button class="btn-view" onclick="showPreview(${i})">Preview</button>
+        <button class="btn-dl" onclick="downloadHtml(${i})">Download .html</button>
+        <button class="btn-remove" onclick="removeFile(${i})">Remove</button>
+      </div>
+    `;
+    fileListEl.appendChild(div);
+  });
+}
+
+window.showPreview = function(idx) {
+  const item = filesData[idx];
+  if (!item) return;
+
+  previewCont.innerHTML = item.htmlContent;
+  preview.style.display = 'block';
+  preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.downloadHtml = function(idx) {
+  const item = filesData[idx];
+  if (!item) return;
+
+  const blob = new Blob([item.htmlContent], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = item.name.replace(/\.txt$/i, '') + '.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+window.removeFile = function(idx) {
+  filesData.splice(idx, 1);
+  renderFiles();
+  btnClear.style.display = filesData.length ? 'block' : 'none';
+  preview.style.display = 'none';
+};
+
+btnClear.addEventListener('click', () => {
+  filesData = [];
+  renderFiles();
+  btnClear.style.display = 'none';
+  preview.style.display = 'none';
+});
+
+// ─── Utils ────────────────────────────────────────
+function escapeHtml(unsafe) {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+</script>
+
+</body>
+</html>
